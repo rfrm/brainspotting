@@ -50,7 +50,7 @@
       top: 50%;
       left: 0%;
       transform: translate(-50%, -50%);
-      transition: left 0.1s linear, top 0.1s linear;
+      will-change: transform, left, top;
       z-index: 10;
       box-shadow: 0 0 8px var(--glow-color), 0 0 16px var(--glow-color);
     }
@@ -94,6 +94,19 @@
       font-weight: bold;
       font-family: monospace;
       color: var(--code-text);
+    }
+
+    /* Light mode styles */
+    body.light-theme {
+      --bg-color: #ffffff;
+      --panel-bg: #f2f2f2;
+      --text-color: #222;
+      --border-color: #ccc;
+      --pointer-color: black;
+      --marker-color: rgba(50, 50, 255, 0.3);
+      --code-bg: #e0e0e0;
+      --code-text: #004488;
+      --glow-color: #0066cc;
     }
   </style>
 </head>
@@ -140,14 +153,14 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      let darkMode = true;
+      // Apply theme from localStorage immediately
       const savedTheme = localStorage.getItem('theme');
-      const themeStyle = document.getElementById('theme-style');
       if (savedTheme === 'light') {
-        toggleTheme();
+        document.body.classList.add('light-theme');
       }
 
       const pointer = document.getElementById('brainspotting-pointer');
+      const screen = document.getElementById('brainspotting-screen');
 
       // Velocidad
       const speedSlider = document.getElementById('speed-slider');
@@ -181,10 +194,6 @@
         pointerSpeed = parseFloat(speedSlider.value);
         localStorage.setItem(speedKey, pointerSpeed);
         speedValueLabel.textContent = pointerSpeed.toFixed(1);
-        if (intervalId) {
-          clearInterval(intervalId);
-          intervalId = setInterval(updatePosition, 50 / pointerSpeed);
-        }
       });
 
       const localStorageKey = 'brainspottingSavedSpots2D';
@@ -194,39 +203,58 @@
       let directionY = -1;
       let isMoving = false;
       let isVertical = false;
-      let intervalId = null;
+      let animationId = null;
       let showingSavedSpots = false;
+      let lastTimestamp = 0;
+      const MOVEMENT_SPEED_BASE = 100 / 50000 * 50; // Original movement calculation
 
-      pointer.style.top = `${currentYPercent}%`;
-      pointer.style.left = `${currentXPercent}%`;
+      // Set initial position
+      updatePointerPosition();
 
-      function updatePosition() {
+      function updatePointerPosition() {
+        // Set left/top directly as in the original code
+        pointer.style.left = `${currentXPercent}%`;
+        pointer.style.top = `${currentYPercent}%`;
+      }
+
+      function animatePointer(timestamp) {
+        if (!isMoving) return;
+        
+        // Calculate delta time for smoother animation
+        if (!lastTimestamp) lastTimestamp = timestamp;
+        const deltaTime = timestamp - lastTimestamp;
+        lastTimestamp = timestamp;
+        
+        // Normalize to approximately 60fps (16.67ms) for consistent movement speed
+        const speedFactor = deltaTime / 16.67;
+        const movementAmount = MOVEMENT_SPEED_BASE * pointerSpeed * speedFactor;
+        
         if (isVertical) {
-          currentYPercent += directionY * (100 / (24000 / 50)) * pointerSpeed;
+          currentYPercent += directionY * movementAmount;
           if (currentYPercent >= 100) { currentYPercent = 100; directionY = -1; }
           else if (currentYPercent <= 0) { currentYPercent = 0; directionY = 1; }
-          pointer.style.top = `${currentYPercent}%`;
         } else {
-          currentXPercent += directionX * (100 / (24000 / 50)) * pointerSpeed;
+          currentXPercent += directionX * movementAmount;
           if (currentXPercent >= 100) { currentXPercent = 100; directionX = -1; }
           else if (currentXPercent <= 0) { currentXPercent = 0; directionX = 1; }
-          pointer.style.left = `${currentXPercent}%`;
         }
+        
+        updatePointerPosition();
+        animationId = requestAnimationFrame(animatePointer);
       }
 
       function startAutoMove() {
         if (isMoving) return;
-        pointer.style.transition = 'none';
         isMoving = true;
-        intervalId = setInterval(updatePosition, 50 / pointerSpeed);
+        lastTimestamp = 0;
+        animationId = requestAnimationFrame(animatePointer);
       }
 
       function stopAutoMove() {
         if (!isMoving) return;
-        clearInterval(intervalId);
-        intervalId = null;
+        cancelAnimationFrame(animationId);
+        animationId = null;
         isMoving = false;
-        pointer.style.transition = 'left 0.1s linear, top 0.1s linear';
       }
 
       function resumeScan() {
@@ -251,8 +279,7 @@
       function manualMove(dx, dy) {
         currentXPercent = Math.min(100, Math.max(0, currentXPercent + dx));
         currentYPercent = Math.min(100, Math.max(0, currentYPercent + dy));
-        pointer.style.left = `${currentXPercent}%`;
-        pointer.style.top = `${currentYPercent}%`;
+        updatePointerPosition();
       }
 
       function savePosition() {
@@ -265,61 +292,52 @@
         savedSpots.push(position);
         localStorage.setItem(localStorageKey, JSON.stringify(savedSpots));
 
-        document.getElementById('saved-message').style.display = 'block';
+        const savedMessage = document.getElementById('saved-message');
+        savedMessage.style.display = 'block';
         setTimeout(() => {
-          document.getElementById('saved-message').style.display = 'none';
+          savedMessage.style.display = 'none';
         }, 3000);
+
+        // If spots are currently shown, update display
+        if (showingSavedSpots) {
+          // Add just the new marker instead of refreshing all
+          const marker = document.createElement('div');
+          marker.className = 'saved-spot-marker';
+          marker.style.left = `${position.x}%`;
+          marker.style.top = `${position.y}%`;
+          screen.appendChild(marker);
+        }
       }
 
       function toggleSavedSpots() {
-        const screen = document.getElementById('brainspotting-screen');
         if (showingSavedSpots) {
           screen.querySelectorAll('.saved-spot-marker').forEach(marker => marker.remove());
           document.getElementById('saved-indicator').style.display = 'none';
           showingSavedSpots = false;
         } else {
           const savedSpots = JSON.parse(localStorage.getItem(localStorageKey)) || [];
+          // Create fragment for better performance when adding multiple markers
+          const fragment = document.createDocumentFragment();
           savedSpots.forEach(({ x, y }) => {
             const marker = document.createElement('div');
             marker.className = 'saved-spot-marker';
             marker.style.left = `${x}%`;
             marker.style.top = `${y}%`;
-            screen.appendChild(marker);
+            fragment.appendChild(marker);
           });
+          screen.appendChild(fragment);
           document.getElementById('saved-indicator').style.display = 'block';
           showingSavedSpots = true;
         }
       }
 
       function toggleTheme() {
-        const themeStyle = document.getElementById('theme-style');
-        const darkMode = localStorage.getItem('theme') !== 'light';
-        const nextMode = darkMode ? 'light' : 'dark';
-        localStorage.setItem('theme', nextMode);
-
-        if (nextMode === 'dark') {
-          themeStyle.innerHTML = themeStyle.innerHTML
-            .replace('--bg-color: #ffffff', '--bg-color: #1e1e1e')
-            .replace('--panel-bg: #f2f2f2', '--panel-bg: #121212')
-            .replace('--text-color: #222', '--text-color: #f0f0f0')
-            .replace('--border-color: #ccc', '--border-color: #444')
-            .replace('--pointer-color: black', '--pointer-color: white')
-            .replace('--marker-color: rgba(50, 50, 255, 0.3)', '--marker-color: rgba(200, 200, 255, 0.5)')
-            .replace('--code-bg: #e0e0e0', '--code-bg: #333')
-            .replace('--code-text: #004488', '--code-text: #ffd700');
-        } else {
-          themeStyle.innerHTML = themeStyle.innerHTML
-            .replace('--bg-color: #1e1e1e', '--bg-color: #ffffff')
-            .replace('--panel-bg: #121212', '--panel-bg: #f2f2f2')
-            .replace('--text-color: #f0f0f0', '--text-color: #222')
-            .replace('--border-color: #444', '--border-color: #ccc')
-            .replace('--pointer-color: white', '--pointer-color: black')
-            .replace('--marker-color: rgba(200, 200, 255, 0.5)', '--marker-color: rgba(50, 50, 255, 0.3)')
-            .replace('--code-bg: #333', '--code-bg: #e0e0e0')
-            .replace('--code-text: #ffd700', '--code-text: #004488');
-        }
+        document.body.classList.toggle('light-theme');
+        const isLightTheme = document.body.classList.contains('light-theme');
+        localStorage.setItem('theme', isLightTheme ? 'light' : 'dark');
       }
 
+      // Use passive event listeners for better performance
       document.addEventListener('keydown', (event) => {
         if (event.ctrlKey || event.metaKey || event.altKey) return;
         if (event.code === 'Space') {
@@ -328,9 +346,11 @@
         } else if (event.key.toLowerCase() === 'r') {
           resumeScan();
         } else if (event.key.toLowerCase() === 'v') {
-          switchToVertical();
+          isVertical = true;
+          if (!isMoving) startAutoMove();
         } else if (event.key.toLowerCase() === 'h') {
-          switchToHorizontal();
+          isVertical = false;
+          if (!isMoving) startAutoMove();
         } else if (event.key.toLowerCase() === 't') {
           toggleTheme();
         } else if (event.key.toLowerCase() === 'c' && showingSavedSpots) {
@@ -345,9 +365,10 @@
         }
 
         if (event.key.toLowerCase() === 'a') toggleSavedSpots();
-      });
+      }, { passive: false });
+
+      // The pointer starts stopped (removed startAutoMove() that was here)
     });
   </script>
 </body>
 </html>
-
