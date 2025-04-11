@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Brainspotting Pointer Simulation (2D Enhanced)</title>
+  <title>Simulación Brainspotting (2D Mejorada)</title>
   <style id="theme-style">
     :root {
       --bg-color: #1e1e1e;
@@ -100,6 +100,9 @@
 <body>
   <div id="brainspotting-screen">
     <div id="brainspotting-pointer"></div>
+    <div id="saved-indicator" style="display:none; font-weight: bold; position: absolute; bottom: 10px; right: 10px; color: var(--glow-color); background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px; font-size: 0.9em;">
+      👁️ Mostrando puntos guardados
+    </div>
   </div>
 
   <div id="controls">
@@ -113,11 +116,14 @@
     <p style="margin-left: 20px;"><code>S</code> para guardar el punto actual en 2D.</p>
     <p><code>Barra espaciadora</code> para DETENER el movimiento.</p>
     <p><code>A</code> para mostrar/ocultar los puntos guardados.</p>
+    <p><code>C</code> para borrar todos los puntos guardados (solo si están visibles).</p>
     <p><code>T</code> para alternar entre tema claro y oscuro.</p>
   </div>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
+      const savedIndicator = document.getElementById('saved-indicator');
+
       let darkMode = true;
       const savedTheme = localStorage.getItem('theme');
       const themeStyle = document.getElementById('theme-style');
@@ -187,6 +193,7 @@
       function switchToVertical() {
         if (!isMoving) {
           isVertical = true;
+          direction = -1; // iniciar hacia arriba
           startAutoMove();
         }
       }
@@ -232,11 +239,13 @@
           screen.appendChild(marker);
         });
         showingSavedSpots = true;
+        savedIndicator.style.display = 'block';
       }
 
       function hideSavedSpots() {
         screen.querySelectorAll('.saved-spot-marker').forEach(marker => marker.remove());
         showingSavedSpots = false;
+        savedIndicator.style.display = 'none';
       }
 
       function toggleSavedSpots() {
@@ -284,6 +293,14 @@
           switchToHorizontal();
         } else if (event.key === 't' || event.key === 'T') {
           toggleTheme();
+        } else if (event.key === 'c' || event.key === 'C') {
+          if (showingSavedSpots) {
+            localStorage.removeItem(localStorageKey);
+            hideSavedSpots();
+            console.log("🗑️ Todos los puntos guardados han sido eliminados.");
+          } else {
+            console.log("ℹ️ Para borrar, primero muestra los puntos con 'A'.");
+          }
         } else if (!isMoving) {
           if (event.key === 'ArrowLeft') manualMove(-manualMoveStepPercentage, 0);
           if (event.key === 'ArrowRight') manualMove(manualMoveStepPercentage, 0);
@@ -295,7 +312,7 @@
         if (event.key === 'a' || event.key === 'A') toggleSavedSpots();
       });
 
-      console.log("🌗 Ready. R = resume, H = horizontal, V = vertical, T = toggle theme.");
+      console.log("🌗 Listo. R = reanudar, H = horizontal, V = vertical, T = tema, C = borrar.");
     });
   </script>
 </body>
