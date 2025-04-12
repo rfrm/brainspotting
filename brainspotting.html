@@ -15,6 +15,7 @@
       --code-bg: #2a2a2a;
       --code-text: #f6d96f;
       --glow-color: #66cccc;
+      --arrow-color: #ff6b6b;
     }
 
     body {
@@ -53,6 +54,44 @@
       will-change: transform, left, top;
       z-index: 10;
       box-shadow: 0 0 8px var(--glow-color), 0 0 16px var(--glow-color);
+    }
+
+    #direction-arrow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      transform: translate(-50%, -50%);
+      z-index: 11;
+    }
+
+    /* Flecha horizontal derecha (por defecto) */
+    #direction-arrow.right {
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      border-left: 8px solid var(--arrow-color);
+    }
+
+    /* Flecha horizontal izquierda */
+    #direction-arrow.left {
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      border-right: 8px solid var(--arrow-color);
+    }
+
+    /* Flecha vertical hacia abajo */
+    #direction-arrow.down {
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 8px solid var(--arrow-color);
+    }
+
+    /* Flecha vertical hacia arriba */
+    #direction-arrow.up {
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 8px solid var(--arrow-color);
     }
 
     .saved-spot-marker {
@@ -107,12 +146,15 @@
       --code-bg: #e8e8e5;
       --code-text: #004466;
       --glow-color: #3b82f6;
+      --arrow-color: #e74c3c;
     }
 </style>
 </head>
 <body>
   <div id="brainspotting-screen">
-    <div id="brainspotting-pointer"></div>
+    <div id="brainspotting-pointer">
+      <div id="direction-arrow" class="right"></div>
+    </div>
     <div id="saved-indicator" style="display:none; font-weight: bold; position: absolute; bottom: 10px; right: 10px; color: var(--glow-color); background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px; font-size: 0.9em;">
       👁️ Mostrando puntos guardados
     </div>
@@ -160,6 +202,7 @@
       }
 
       const pointer = document.getElementById('brainspotting-pointer');
+      const directionArrow = document.getElementById('direction-arrow');
       const screen = document.getElementById('brainspotting-screen');
 
       // Velocidad
@@ -210,11 +253,32 @@
 
       // Set initial position
       updatePointerPosition();
+      updateArrowDirection();
 
       function updatePointerPosition() {
         // Set left/top directly as in the original code
         pointer.style.left = `${currentXPercent}%`;
         pointer.style.top = `${currentYPercent}%`;
+      }
+
+      function updateArrowDirection() {
+        // Quitar todas las clases de dirección
+        directionArrow.classList.remove('right', 'left', 'up', 'down');
+        
+        // Añadir la clase según la dirección actual
+        if (isVertical) {
+          if (directionY > 0) {
+            directionArrow.classList.add('down');
+          } else {
+            directionArrow.classList.add('up');
+          }
+        } else {
+          if (directionX > 0) {
+            directionArrow.classList.add('right');
+          } else {
+            directionArrow.classList.add('left');
+          }
+        }
       }
 
       function animatePointer(timestamp) {
@@ -231,12 +295,12 @@
         
         if (isVertical) {
           currentYPercent += directionY * movementAmount;
-          if (currentYPercent >= 100) { currentYPercent = 100; directionY = -1; }
-          else if (currentYPercent <= 0) { currentYPercent = 0; directionY = 1; }
+          if (currentYPercent >= 100) { currentYPercent = 100; directionY = -1; updateArrowDirection(); }
+          else if (currentYPercent <= 0) { currentYPercent = 0; directionY = 1; updateArrowDirection(); }
         } else {
           currentXPercent += directionX * movementAmount;
-          if (currentXPercent >= 100) { currentXPercent = 100; directionX = -1; }
-          else if (currentXPercent <= 0) { currentXPercent = 0; directionX = 1; }
+          if (currentXPercent >= 100) { currentXPercent = 100; directionX = -1; updateArrowDirection(); }
+          else if (currentXPercent <= 0) { currentXPercent = 0; directionX = 1; updateArrowDirection(); }
         }
         
         updatePointerPosition();
@@ -247,6 +311,7 @@
         if (isMoving) return;
         isMoving = true;
         lastTimestamp = 0;
+        updateArrowDirection(); // Actualizar la flecha al comenzar el movimiento
         animationId = requestAnimationFrame(animatePointer);
       }
 
@@ -263,20 +328,21 @@
       }
 
       function switchToVertical() {
-        if (!isMoving) {
-          isVertical = true;
-          startAutoMove();
-        }
+        if (isVertical) return;
+        isVertical = true;
+        updateArrowDirection();
+        if (!isMoving) startAutoMove();
       }
 
       function switchToHorizontal() {
-        if (!isMoving) {
-          isVertical = false;
-          startAutoMove();
-        }
+        if (!isVertical) return;
+        isVertical = false;
+        updateArrowDirection();
+        if (!isMoving) startAutoMove();
       }
 
       function manualMove(dx, dy) {
+        // El movimiento manual no cambia la dirección de la flecha
         currentXPercent = Math.min(100, Math.max(0, currentXPercent + dx));
         currentYPercent = Math.min(100, Math.max(0, currentYPercent + dy));
         updatePointerPosition();
@@ -346,11 +412,9 @@
         } else if (event.key.toLowerCase() === 'r') {
           resumeScan();
         } else if (event.key.toLowerCase() === 'v') {
-          isVertical = true;
-          if (!isMoving) startAutoMove();
+          switchToVertical();
         } else if (event.key.toLowerCase() === 'h') {
-          isVertical = false;
-          if (!isMoving) startAutoMove();
+          switchToHorizontal();
         } else if (event.key.toLowerCase() === 't') {
           toggleTheme();
         } else if (event.key.toLowerCase() === 'c' && showingSavedSpots) {
